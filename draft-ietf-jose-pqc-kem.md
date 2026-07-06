@@ -3,7 +3,7 @@ title: "Post-Quantum Key Encapsulation Mechanisms (PQ KEMs) for COSE"
 abbrev: "PQ KEM for COSE"
 category: std
 
-docname: draft-ietf-jose-pqc-kem
+docname: draft-ietf-jose-pqc-kem-06
 submissiontype: IETF
 number:
 date:
