@@ -279,11 +279,7 @@ This specification supports two uses of PQ-KEM in COSE, namely
 *  PQ-KEM in a Key Agreement with Key Wrap mode.
 
 In both modes, the content encryption algorithm of the COSE_Encrypt
-structure MUST be an AEAD algorithm. A recipient MUST reject a
-COSE_Encrypt structure that uses a recipient algorithm defined in this
-document with a non-AEAD content encryption algorithm, such as those
-defined in {{?RFC9459}}.
-
+structure MUST be an AEAD algorithm.
 In both modes, the COSE header parameter `ek`, defined in Section 7.2 of
 {{?I-D.ietf-cose-hpke}}, is used to convey the ciphertext `ct` output by the
 PQ-KEM encapsulation algorithm.
