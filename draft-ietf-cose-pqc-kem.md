@@ -270,7 +270,7 @@ instantiated as follows:
 
 For all security levels of ML-KEM, KMAC256 is used.
 
-# Post-Quantum KEM in COSE
+# Post-Quantum KEM in COSE {#pq-kem-cose}
 
 This specification supports two uses of PQ-KEM in COSE, namely
 
@@ -278,6 +278,8 @@ This specification supports two uses of PQ-KEM in COSE, namely
 
 *  PQ-KEM in a Key Agreement with Key Wrap mode.
 
+In both modes, the content encryption algorithm of the COSE_Encrypt
+structure MUST be an AEAD algorithm.
 In both modes, the COSE header parameter `ek`, defined in Section 7.2 of
 {{?I-D.ietf-cose-hpke}}, is used to convey the ciphertext `ct` output by the
 PQ-KEM encapsulation algorithm.
@@ -404,6 +406,25 @@ intermediate ML-KEM values directly as COSE keying material, KDF input,
 authentication input, or application data. Implementations SHOULD avoid exposing
 intermediate values through APIs, logs, errors, or side channels.
 
+## Key Wrap and Algorithm Substitution
+
+In Key Agreement with Key Wrap mode, the CEK is not bound to the content
+encryption algorithm of the COSE_Encrypt structure. {{?RFC9709}}
+describes an attack on CMS that exploits this: an attacker changes the
+content encryption algorithm from an AEAD algorithm to AES-CBC and, if
+the recipient reveals the output of the failed decryption, for example in
+an error message, recovers plaintext blocks.
+The same attack applies to COSE with AES-CBC or AES-CTR {{?RFC9459}}.
+It is not specific to PQ-KEMs. Direct Key Agreement is not affected,
+since the content encryption algorithm is input to the KDF.
+
+For CMS, {{?RFC9709}} mitigates the attack by encrypting the content
+with a key derived from the CEK and the content encryption algorithm
+identifier. A changed algorithm identifier results in a different key,
+and decryption fails. This document instead requires AEAD content
+encryption algorithms ({{pq-kem-cose}}). A substituted AEAD algorithm
+fails authentication.
+
 # IANA Considerations {#IANA}
 
 ## COSE Algorithms Registrations
@@ -508,6 +529,12 @@ and Stepan Yakimovich for their contributions to this specification.
 {: numbered="false"}
 
 [[ to be removed by the RFC Editor before publication as an RFC ]]
+
+-01
+
+* Required AEAD content encryption algorithms.
+* Security Considerations: added text on algorithm substitution with AES Key
+  Wrap.
 
 -00
 
