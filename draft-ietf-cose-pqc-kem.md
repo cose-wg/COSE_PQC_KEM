@@ -62,11 +62,6 @@ normative:
         org: IANA
      title: CBOR Object Signing and Encryption (COSE)
      target: https://www.iana.org/assignments/cose
-  COSE-IANA-Curves:
-     author:
-        org: IANA
-     title: COSE Elliptic Curves
-     target: https://www.iana.org/assignments/cose
 
 informative:
 
@@ -107,7 +102,9 @@ informative:
 --- abstract
 
 This document describes conventions for using Post-Quantum Key Encapsulation
-Mechanisms (PQ-KEMs) with CBOR Object Signing and Encryption (COSE).
+Mechanisms (PQ-KEMs) with CBOR Object Signing and Encryption (COSE). It
+specifies the use of ML-KEM and of PQ/T hybrid KEMs that combine ML-KEM with a
+traditional elliptic curve algorithm.
 
 --- middle
 
@@ -126,6 +123,15 @@ Although this mechanism could thus be used with any PQ-KEM, this document focuse
 using the recipient's ML-KEM public key. Three parameters sets for ML-KEMs are specified by {{FIPS203}}. In order of increasing security strength (and decreasing performance), these parameter sets
 are ML-KEM-512, ML-KEM-768, and ML-KEM-1024.
 
+Some deployments want to retain the security of a traditional algorithm while
+migrating to post-quantum cryptography, so that confidentiality is preserved
+as long as at least one of the two algorithms remains secure. For these
+deployments, this document also specifies the use of the PQ/T hybrid KEMs
+defined in {{!I-D.irtf-cfrg-concrete-hybrid-kems}}, which combine ML-KEM with
+an elliptic curve group. A PQ/T hybrid KEM exposes the same interface as
+ML-KEM and is used in COSE in exactly the same way. Only the algorithm
+identifiers and the sizes of keys and ciphertexts differ.
+
 # Conventions and Definitions
 
 {::boilerplate bcp14-tagged}
@@ -136,6 +142,11 @@ This document makes use of the terms defined in {{?I-D.ietf-pquip-pqt-hybrid-ter
 - PQ-KEM: Post-Quantum Key Encapsulation Mechanism
 - CEK: Content Encryption Key
 - ML-KEM: Module-Lattice-based Key Encapsulation Mechanism
+- PQ/T Hybrid KEM: A KEM that combines a post-quantum and a traditional
+  component algorithm into a single KEM
+
+Unless stated otherwise, the term "PQ-KEM" in this document covers both ML-KEM
+and the PQ/T hybrid KEMs specified in {{hybrid-kems}}.
 
 For the purposes of this document, it is helpful to be able to divide cryptographic algorithms into two classes:
 
@@ -158,11 +169,12 @@ For the purposes of this document, we consider a Key Encapsulation Mechanism (KE
 where pk is public key, sk is secret key, ct is the ciphertext representing an encapsulated key, and ss is shared secret.
 
 This document uses the COSE header parameter `ek` to carry the KEM ciphertext
-`ct` produced by ML-KEM encapsulation. This differs from the terminology used
-in FIPS 203 and {{?RFC9936}}, where `ek` denotes the public ML-KEM
-encapsulation key. In this document, the public ML-KEM encapsulation key is
-represented as the public component of an AKP key, while the COSE header
-parameter `ek` carries the encapsulated key, namely the KEM ciphertext `ct`.
+`ct` produced by PQ-KEM encapsulation. This differs from the terminology used
+in FIPS 203, {{?RFC9936}}, and {{I-D.irtf-cfrg-concrete-hybrid-kems}}, where
+`ek` denotes the public encapsulation key. In this document, the public
+encapsulation key is represented as the public component of an AKP key, while
+the COSE header parameter `ek` carries the encapsulated key, namely the KEM
+ciphertext `ct`.
 
 KEMs are typically used in cases where two parties, hereby refereed to as the "encapsulater" and the "decapsulater", wish to establish a shared secret via public key cryptography, where the decapsulater has an asymmetric key pair and has previously shared the public key with the encapsulater.
 
@@ -179,11 +191,26 @@ Key Agreement with Key Wrap supports efficient encryption for multiple
 recipients: the content is encrypted once with the CEK, and an individually
 wrapped CEK is provided for each recipient.
 
-It is essential to note that in the PQ-KEM, one needs to apply Fujisaki-Okamoto {{FO}} transform or its variant {{HHK}} on the PQC KEM part to ensure that the overall scheme is IND-CCA2 secure, as mentioned in {{?I-D.ietf-tls-hybrid-design}}. The FO transform is performed using the KDF such that the PQC KEM shared secret achieved is IND-CCA2 secure. As a consequence, one can re-use PQC KEM public keys but there is an upper bound that must be adhered to.
+ML-KEM is IND-CCA2 secure, as stated in Section 3.2 of {{FIPS203}}. This
+property comes from a variant of the Fujisaki-Okamoto transform ({{FO}},
+{{HHK}}) that is built into the ML-KEM encapsulation and decapsulation
+algorithms. A COSE implementation does not need to add anything to obtain it.
+The PQ/T hybrid KEMs specified in {{hybrid-kems}} are IND-CCA2 secure as well.
+Because of this property, a recipient's PQ-KEM public key can be reused for
+many encapsulations.
 
-During the transition from traditional to post-quantum algorithms, protocols
-may need to combine both types of algorithms. The use of hybrid post-quantum
-KEMs with HPKE and COSE is outside the scope of this document.
+The KDF specified in {{kdf}} does not contribute to the IND-CCA2 security of
+the PQ-KEM. It is applied to the PQ-KEM shared secret to derive a key of the
+length required by the content encryption or key wrap algorithm and to bind
+that key to the COSE context, including the algorithm identifiers.
+
+During the transition from traditional to post-quantum algorithms, some
+deployments combine both types of algorithms. {{hybrid-kems}} specifies the
+use of PQ/T hybrid KEMs for this purpose. A PQ/T hybrid KEM is treated as a
+single KEM with a single public key and a single ciphertext. This document
+does not define a way to combine separately conveyed traditional and
+post-quantum recipient structures. The use of PQ-KEMs with HPKE in COSE is
+specified in {{?I-D.ietf-cose-hpke}} and is outside the scope of this document.
 
 # KEM PQC Algorithms
 
@@ -192,6 +219,41 @@ At time of writing, NIST have standardized three PQC algorithms, with more expec
 ## ML-KEM
 
 ML-KEM offers several parameter sets with varying levels of security and performance trade-offs. This document specifies the use of the ML-KEM algorithm at three security levels: ML-KEM-512, ML-KEM-768, and ML-KEM-1024. ML-KEM key generation, encapsulation and decaspulation functions are defined in {{FIPS203}}. The main security property for KEMs standardized in the NIST Post-Quantum Cryptography Standardization Project is indistinguishability under adaptive chosen ciphertext attacks (IND-CCA2) (see Section 10.2 of {{?I-D.ietf-pquip-pqc-engineers}}). The public/private key sizes, ciphertext key size, and PQ security levels of ML-KEM are detailed in Section 12 of {{?I-D.ietf-pquip-pqc-engineers}}.
+
+## PQ/T Hybrid KEMs {#hybrid-kems}
+
+This document specifies the use of the three PQ/T hybrid KEMs defined in
+{{I-D.irtf-cfrg-concrete-hybrid-kems}}. Each of them combines ML-KEM with an
+elliptic curve group using the CG framework of
+{{!I-D.irtf-cfrg-hybrid-kems}}, with SHAKE256 as the PRG and SHA3-256 as the
+KDF of the combiner:
+
+- MLKEM768-P256 combines ML-KEM-768 with P-256.
+- MLKEM768-X25519 combines ML-KEM-768 with X25519. It is identical to X-Wing
+  {{?I-D.connolly-cfrg-xwing-kem}}.
+- MLKEM1024-P384 combines ML-KEM-1024 with P-384.
+
+The functions GenerateKeyPair, Encaps, and Decaps of
+{{I-D.irtf-cfrg-hybrid-kems}} provide the kemKeyGen, kemEncaps, and kemDecaps
+functions of {{KEMs}}, respectively. The combiner that produces the hybrid
+shared secret from the two component shared secrets is part of the hybrid KEM.
+It is distinct from, and applied before, the KDF specified in {{kdf}}.
+
+{{hybrid-sizes}} lists the sizes, in octets, of the values used by the hybrid
+KEMs. These are the Nek, Ndk, Nct, and Nss constants of
+{{I-D.irtf-cfrg-concrete-hybrid-kems}}.
+
+| Hybrid KEM      | Public key | Private key | Ciphertext | Shared secret |
+|-----------------|-----------:|------------:|-----------:|--------------:|
+| MLKEM768-P256   |       1249 |          32 |       1153 |            32 |
+| MLKEM768-X25519 |       1216 |          32 |       1120 |            32 |
+| MLKEM1024-P384  |       1665 |          32 |       1665 |            32 |
+{: #hybrid-sizes title="Sizes of PQ/T Hybrid KEM Values in Octets"}
+
+The public key and the ciphertext of a hybrid KEM are each a single opaque
+byte string. Implementations MUST NOT split them into their component parts
+for conveyance in COSE, and MUST NOT use the component keys of a hybrid KEM
+key pair with any other algorithm.
 
 ## PQ-KEM Encapsulation {#encrypt}
 
@@ -218,8 +280,9 @@ required by the content encryption algorithm used by the COSE_Encrypt
 structure. In Key Agreement with Key Wrap mode, the output of the KDF MUST have
 the key length required by the key wrap algorithm selected by the recipient
 algorithm. For the algorithms defined in this specification, the KDF output
-length is 128 bits for ML-KEM-512+A128KW, 192 bits for
-ML-KEM-768+A192KW, and 256 bits for ML-KEM-1024+A256KW.
+length is 128 bits for ML-KEM-512+A128KW, 192 bits for ML-KEM-768+A192KW,
+MLKEM768-P256+A192KW, and MLKEM768-X25519+A192KW, and 256 bits for
+ML-KEM-1024+A256KW and MLKEM1024-P384+A256KW.
 
 When Direct Key Agreement is employed, SS is the CEK. When Key Agreement with Key Wrapping is employed, SS is the key-encryption key used with AES Key Wrap to wrap the CEK; SS is not the CEK.
 
@@ -245,7 +308,7 @@ The decapsulation process is as follows:
           SS = KDF(SS', SSLen)
 ~~~
 
-# KDF
+# KDF {#kdf}
 
 ## Key Derivation
 
@@ -264,11 +327,11 @@ instantiated as follows:
       sender and recipient MUST agree out of band to include it as SuppPrivInfo,
       as defined in {{NIST.SP.800-56Ar3}}.
 
-   *  L: length of the output key in bits. In Direct Key Agreement mode, L is set to the key length required by the content encryption algorithm. In Key Agreement with Key Wrapping mode, L is set to the key length required by the key wrap algorithm; for ML-KEM-512+A128KW, ML-KEM-768+A192KW, and ML-KEM-1024+A256KW this is 128, 192, and 256 bits, respectively.
+   *  L: length of the output key in bits. In Direct Key Agreement mode, L is set to the key length required by the content encryption algorithm. In Key Agreement with Key Wrapping mode, L is set to the key length required by the key wrap algorithm, as listed in {{encrypt}}.
 
    *  S: the optional customization label. In this document this parameter is unused, that is it is the zero-length string "".
 
-For all security levels of ML-KEM, KMAC256 is used.
+KMAC256 is used for all security levels of ML-KEM and for all PQ/T hybrid KEMs.
 
 # Post-Quantum KEM in COSE {#pq-kem-cose}
 
@@ -340,6 +403,11 @@ ML-KEM-1024 MUST be used with a KDF capable of producing a key with at least
 256 bits of security and, in Key Agreement with Key Wrap mode, with a key wrap
 algorithm having a key length of at least 256 bits.
 
+The key wrap algorithm paired with a PQ/T hybrid KEM follows that of its
+ML-KEM component. MLKEM768-P256 and MLKEM768-X25519 are subject to the
+requirements stated above for ML-KEM-768, and MLKEM1024-P384 is subject to the
+requirements stated above for ML-KEM-1024.
+
 {{ciphersuite-table}} lists the COSE algorithm values for the PQ-KEM
 ciphersuites defined by this document.
 
@@ -359,22 +427,49 @@ ciphersuites defined by this document.
 +-------------------------------+---------+-----------------------------------+-------------+
 | ML-KEM-1024+A256KW            | TBD6    | ML-KEM-1024 + AES256KW            | No          |
 +-------------------------------+---------+-----------------------------------+-------------+
+| MLKEM768-P256                 | TBD7    | MLKEM768-P256                     | No          |
++-------------------------------+---------+-----------------------------------+-------------+
+| MLKEM768-X25519               | TBD8    | MLKEM768-X25519                   | No          |
++-------------------------------+---------+-----------------------------------+-------------+
+| MLKEM1024-P384                | TBD9    | MLKEM1024-P384                    | No          |
++-------------------------------+---------+-----------------------------------+-------------+
+| MLKEM768-P256+A192KW          | TBD10   | MLKEM768-P256 + AES192KW          | No          |
++-------------------------------+---------+-----------------------------------+-------------+
+| MLKEM768-X25519+A192KW        | TBD11   | MLKEM768-X25519 + AES192KW        | No          |
++-------------------------------+---------+-----------------------------------+-------------+
+| MLKEM1024-P384+A256KW         | TBD12   | MLKEM1024-P384 + AES256KW         | No          |
++-------------------------------+---------+-----------------------------------+-------------+
 ~~~
 {: #ciphersuite-table title="COSE PQ-KEM Ciphersuites."}
 
-# Use of AKP Key Type for PQC KEM Keys in COSE
+# Use of AKP Key Type for PQ-KEM Keys in COSE {#akp}
 
 The "AKP" (Algorithm Key Pair) key type, defined in
-{{?I-D.ietf-cose-dilithium}}, is used to represent PQC KEM keys in COSE. A
-COSE_Key with "kty" set to "AKP" represents a PQC KEM key pair. The public key
-is carried in the "pub" parameter. If included, the private key is carried in
-the "priv" parameter. Both parameters are byte strings containing the raw
-algorithm-specific key material.
+{{?I-D.ietf-cose-dilithium}}, is the only key representation defined by this
+document for PQ-KEM keys. A COSE_Key with "kty" set to "AKP" represents a
+PQ-KEM key pair. The public key is carried in the "pub" parameter. If
+included, the private key is carried in the "priv" parameter. Both parameters
+are byte strings containing the raw algorithm-specific key material.
 
-The "AKP" key type mandates the use of the "alg" parameter. While this requirement is suitable for PQ digital signature algorithms, applying the same model to PQ KEMs would require distinguishing between keys used
-for Direct Key Agreement and those used for Key Agreement with Key Wrap.
+PQ-KEM keys are not represented using the "OKP" or "EC2" key types, and this
+document does not register values in the "COSE Elliptic Curves" registry. The
+PQ-KEM is identified by the "alg" parameter of the AKP key and not by a "crv"
+parameter.
 
-Note: This differs from the "OKP" usage model and requires further discussion within the WG.
+The "AKP" key type mandates the use of the "alg" parameter. The value of "alg"
+MUST be one of the algorithms listed in {{ciphersuite-table}}, and a key MUST
+only be used with the algorithm identified by its "alg" parameter. A key is
+therefore bound either to Direct Key Agreement or to Key Agreement with Key
+Wrap. A recipient that supports both modes for the same PQ-KEM publishes two
+COSE_Key objects, one for each algorithm.
+
+Note: Binding a KEM key to one of the two modes differs from the "OKP" usage
+model and requires further discussion within the WG.
+
+## ML-KEM Keys
+
+For ML-KEM, the "pub" parameter contains the encapsulation key as specified in
+{{FIPS203}}.
 
 For ML-KEM algorithms, as specified in {{FIPS203}}, there are two possible
 representations of a private key: a seed and a fully expanded private key
@@ -386,6 +481,21 @@ expanded private key are derived from this seed using
 not define a 32-octet private seed representation and does not support carrying
 the expanded private key in "priv". This avoids implicit,
 implementation-specific key expansion.
+
+## PQ/T Hybrid KEM Keys
+
+For the PQ/T hybrid KEMs of {{hybrid-kems}}, the "pub" parameter contains the
+hybrid encapsulation key and the "priv" parameter contains the hybrid
+decapsulation key, both as specified in
+{{I-D.irtf-cfrg-concrete-hybrid-kems}}. Their lengths are given in
+{{hybrid-sizes}}.
+
+The hybrid decapsulation key is a 32-octet seed from which the decapsulation
+keys of both components are derived. The "priv" parameter MUST contain this
+seed. This document does not support carrying the expanded component
+decapsulation keys in "priv". A recipient MUST reject a hybrid KEM key whose
+"pub" or "priv" parameter does not have the length given in {{hybrid-sizes}}
+for the algorithm identified by "alg".
 
 # Security Considerations
 
@@ -405,6 +515,29 @@ ciphertext values described by this specification. Implementations MUST NOT use
 intermediate ML-KEM values directly as COSE keying material, KDF input,
 authentication input, or application data. Implementations SHOULD avoid exposing
 intermediate values through APIs, logs, errors, or side channels.
+
+## PQ/T Hybrid KEMs
+
+The PQ/T hybrid KEMs specified in {{hybrid-kems}} are designed to remain secure
+as long as either the ML-KEM component or the traditional component remains
+secure. The security considerations of {{I-D.irtf-cfrg-hybrid-kems}} and
+{{I-D.irtf-cfrg-concrete-hybrid-kems}} apply.
+
+A hybrid KEM does not provide more protection against a quantum-capable
+attacker than its ML-KEM component. The traditional component provides a
+safeguard against a failure of ML-KEM or of its implementation. It does not
+raise the post-quantum security level.
+
+The hybrid shared secret is computed by the combiner defined in
+{{I-D.irtf-cfrg-hybrid-kems}}. Implementations MUST NOT replace this combiner
+with the KDF specified in {{kdf}}, and MUST NOT use the shared secret of
+either component on its own as COSE keying material or as KDF input.
+
+The component keys of a hybrid KEM key pair are derived from a single seed.
+Using one of these component keys with a standalone algorithm, for example
+using the ML-KEM-768 component key of an MLKEM768-X25519 key with the
+ML-KEM-768 algorithm of this document, removes the protection offered by the
+hybrid construction and is prohibited by {{hybrid-kems}}.
 
 ## Key Wrap and Algorithm Substitution
 
@@ -480,47 +613,58 @@ registry {{COSE-IANA}}:
 - Reference: This document (TBD)
 - Recommended: No
 
-## COSE Elliptic Curves Registrations
+- Name: MLKEM768-P256
+- Value: TBD7
+- Description: PQ/T hybrid KEM that uses MLKEM768-P256.
+- Capabilities: [kty]
+- Change Controller: IESG
+- Reference: This document (TBD)
+- Recommended: No
 
-IANA is requested to register the following values in the "COSE Elliptic Curves" registry {{COSE-IANA-Curves}}.
+- Name: MLKEM768-X25519
+- Value: TBD8
+- Description: PQ/T hybrid KEM that uses MLKEM768-X25519.
+- Capabilities: [kty]
+- Change Controller: IESG
+- Reference: This document (TBD)
+- Recommended: No
 
-### ML-KEM-512
+- Name: MLKEM1024-P384
+- Value: TBD9
+- Description: PQ/T hybrid KEM that uses MLKEM1024-P384.
+- Capabilities: [kty]
+- Change Controller: IESG
+- Reference: This document (TBD)
+- Recommended: No
 
-| Name             | ML-KEM-512                                                              |
-|------------------|-------------------------------------------------------------------------|
-| Value            | TBD1                                                                    |
-| Key Type         | AKP                                                                     |
-| Description      | NIST Post-Quantum ML-KEM-512 |
-| Change Controller| IETF                                                                    |
-| Reference        | This document                                                           |
-| Recommended      | No
+- Name: MLKEM768-P256+A192KW
+- Value: TBD10
+- Description: PQ/T hybrid KEM that uses MLKEM768-P256 and CEK wrapped with "A192KW".
+- Capabilities: [kty]
+- Change Controller: IESG
+- Reference: This document (TBD)
+- Recommended: No
 
-### ML-KEM-768
+- Name: MLKEM768-X25519+A192KW
+- Value: TBD11
+- Description: PQ/T hybrid KEM that uses MLKEM768-X25519 and CEK wrapped with "A192KW".
+- Capabilities: [kty]
+- Change Controller: IESG
+- Reference: This document (TBD)
+- Recommended: No
 
-| Name             | ML-KEM-768                                                              |
-|------------------|-------------------------------------------------------------------------|
-| Value            | TBD2                                                                    |
-| Key Type         | AKP                                                                     |
-| Description      | NIST Post-Quantum ML-KEM-768 |
-| Change Controller| IETF                                                                    |
-| Reference        | This document                                                           |
-| Recommended      | No                                                                      |
-
-### ML-KEM-1024
-
-| Name             | ML-KEM-1024                                                             |
-|------------------|-------------------------------------------------------------------------|
-| Value            | TBD3                                                                   |
-| Key Type         | AKP                                                                     |
-| Description      | NIST Post-Quantum ML-KEM-1024 |
-| Change Controller| IETF                                                                    |
-| Reference        | This document                                                           |
-| Recommended      | No                                                                      |
+- Name: MLKEM1024-P384+A256KW
+- Value: TBD12
+- Description: PQ/T hybrid KEM that uses MLKEM1024-P384 and CEK wrapped with "A256KW".
+- Capabilities: [kty]
+- Change Controller: IESG
+- Reference: This document (TBD)
+- Recommended: No
 
 # Acknowledgments
 {: numbered="false"}
 
-The authors thank AJITOMI Daisuke, Brian Campbell, Daniel Huigens, Filip Skokan, Ilari Liusvaara, Neil Madden,
+The authors thank Mark Atwood, Ajitomi Daisuke, Brian Campbell, Daniel Huigens, Filip Skokan, Ilari Liusvaara, Neil Madden,
 and Stepan Yakimovich for their contributions to this specification.
 
 --- back
@@ -532,6 +676,22 @@ and Stepan Yakimovich for their contributions to this specification.
 
 -01
 
+* Added the PQ/T hybrid KEMs MLKEM768-P256, MLKEM768-X25519, and
+  MLKEM1024-P384 from draft-irtf-cfrg-concrete-hybrid-kems.
+* Registered six COSE algorithms for the hybrid KEMs, three for Direct Key
+  Agreement and three for Key Agreement with Key Wrap.
+* Defined the AKP representation of hybrid KEM keys.
+* Security Considerations: added text on PQ/T hybrid KEMs.
+* Corrected the description of IND-CCA2 security: ML-KEM is IND-CCA2 secure
+  on its own, and the KDF does not perform the FO transform.
+* Clarified that the KDF derives a key of the required length and binds it
+  to the COSE context.
+* Removed the statement about an upper bound on the reuse of PQ-KEM public
+  keys.
+* AKP is the only key representation. Removed the registrations in the
+  COSE Elliptic Curves registry.
+* An AKP key is bound to the algorithm in its "alg" parameter and thus to
+  either Direct Key Agreement or Key Agreement with Key Wrap.
 * Required AEAD content encryption algorithms.
 * Security Considerations: added text on algorithm substitution with AES Key
   Wrap.
